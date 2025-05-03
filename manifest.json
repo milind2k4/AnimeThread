@@ -1,0 +1,32 @@
+{
+  "manifest_version": 2,
+  "name": "AniReddit",
+  "version": "1.0",
+  "description": "Displays Reddit r/anime comments on anime episode pages.",
+  "icons": {
+    "48": "icons/icon48.png"
+  },
+  "permissions": [
+    "activeTab",
+    "https://www.reddit.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://animekai.to/*",
+        "*://www.crunchyroll.com/*",
+        "*://www.9anime.to/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "style.css"
+      ]
+    }
+  ],
+  "browser_action": {
+    "default_icon": "icons/icon48.png",
+    "default_title": "AniReddit"
+  }
+}
