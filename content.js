@@ -1,137 +1,166 @@
-// Function to extract the English title
-function extractEnglishTitle(pageTitle) {
-    const regex = /^Anime (.*?) Watch Online Free - AnimeKAI/;
-    const match = pageTitle.match(regex);
-    return match ? match[1] : null;
+function extractEnglishTitle() {
+    const titleElement = document.querySelector('.al-title.text-expand');
+    if (!titleElement) {
+        console.error("Title element not found.");
+        return null;
+    }
+
+    const titleText = titleElement.textContent.trim();
+    const titles = titleText.split(';');
+
+    if (titles.length >= 2) {
+        return titles[1].trim(); // The second title is the English title
+    }
+    return null; // Return null if we cannot extract the English title
 }
 
-function extractJapaneseTitleAndEpisode(url) {
-    // Match the full slug after /watch/ and the episode number after #ep=
-    const animeRegex = /\/watch\/([^\/#]+)/;
+function extractJapaneseTitle() {
+    const titleElement = document.querySelector('.al-title.text-expand');
+    if (!titleElement) {
+        console.error("Title element not found.");
+        return { japaneseTitle: null };
+    }
+
+    const titleText = titleElement.textContent.trim();
+    const titles = titleText.split(';');
+    
+    const japaneseTitle = titles.length >= 1 ? titles[0].trim() : null;
+    
+    return japaneseTitle;
+}
+
+function extractEpisode(url) {
     const episodeRegex = /#ep=(\d+)/;
-
-    const animeMatch = url.match(animeRegex);
     const episodeMatch = url.match(episodeRegex);
+    const episodeNumber = episodeMatch ? episodeMatch[1] : "Unknown";
 
-    let rawAnimeSlug = animeMatch ? animeMatch[1] : "";
-
-    // Always remove the last part (assumed to be the identifier)
-    const parts = rawAnimeSlug.split("-");
-    if (parts.length > 1) {
-        parts.pop(); // remove the ID like 'xeqq'
-    }
-
-    // Convert remaining parts to Title Case
-    const japaneseTitle = parts
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" ")
-        .trim();
-
-    const episodeNumber = episodeMatch ? episodeMatch[1] : "Unknown Episode";
-
-    return { japaneseTitle, episodeNumber };
+    return episodeNumber;    
 }
 
-// Function to search Reddit for posts matching the anime title and episode number
-async function searchRedditPosts(query) {
+async function searchRedditPosts(query, pageJapanese, pageEnglish, urlEpisodeNumber) {
     const url = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&sort=relevance`;
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
+            }
+        });
+
+        if (!response.ok) {
+            console.error(`Failed to fetch data: ${response.status}`);
+            return null;
         }
-    });
 
-    if (!response.ok) {
-        console.error('Error fetching Reddit posts');
-        return [];
+        const data = await response.json();
+        const posts = data.data.children;
+
+        if (!posts.length) {
+            console.log("No posts found.");
+            return null;
+        }
+
+        for (const post of posts) {
+            const postData = post.data;
+            if (postData.author !== "AutoLovepon") continue;
+
+            const title = postData.title;
+            let postEnglish = "";
+            let postJapanese = "";
+            let episodeNumber = null;
+
+            const dualTitleMatch = title.match(/^(.*?)\s*•\s*(.*?)\s*-\s*Episode/i);
+            const singleTitleMatch = title.match(/^(.*?)\s*-\s*Episode/i);
+
+            if (dualTitleMatch) {
+                postJapanese = dualTitleMatch[1].trim();
+                postEnglish = dualTitleMatch[2].trim();
+            } else if (singleTitleMatch) {
+                postEnglish = postJapanese = singleTitleMatch[1].trim();
+            }
+
+            const episodeMatch = title.match(/Episode\s+(\d+)\s+discussion/i);
+            episodeNumber = episodeMatch ? episodeMatch[1] : null;
+
+            const titleMatches = (
+                postEnglish.toLowerCase() === pageEnglish.toLowerCase() || 
+                postJapanese.toLowerCase() === pageJapanese.toLowerCase()
+            );
+
+            if (titleMatches && episodeNumber === urlEpisodeNumber) {
+                return postData;
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error("Error fetching Reddit posts:", error);
+        return null;
     }
-
-    const data = await response.json();
-    return data.data.children;
 }
 
 
-if (window.location.hostname.includes("animekai.to")) {
-    const { japaneseTitle, episodeNumber } = extractJapaneseTitleAndEpisode(window.location.href);
-    const englishTitle = extractEnglishTitle(document.title);
-    const query = `${japaneseTitle} • ${englishTitle} - Episode ${episodeNumber} discussion`;
-
-    // Create the container for the comments box
+function createCommentBox(post) {
     const commentBoxContainer = document.createElement("div");
     commentBoxContainer.id = "commentsBox";
     document.body.appendChild(commentBoxContainer);
-
-    // Add header with anime name and episode
-    const header = document.createElement("div");
-    header.innerHTML = `
-        <h3>Comments for: ${englishTitle}</h3>
-        <h3>Comments for: ${japaneseTitle}</h3>
-        <h4>Episode: ${episodeNumber}</h4>
-        <h4>Query: ${query}</h4>
-    `;
-    commentBoxContainer.appendChild(header);
-
-    // Add loading message or placeholder
-    const loadingText = document.createElement("p");
-    loadingText.textContent = "Loading comments...";
-    commentBoxContainer.appendChild(loadingText);
-}
-
-/*
-
-// Function to create and append the comment box on the page
-function createCommentBox(posts) {
-    const commentBoxContainer = document.createElement("div");
-    commentBoxContainer.id = "commentsBox";
-    document.body.appendChild(commentBoxContainer);
-
-    if (posts.length === 0) {
+    
+    if (!post) {
         commentBoxContainer.innerHTML = '<p>No comments found.</p>';
         return;
     }
-
-    const header = document.createElement("div");
-    const { title, author, permalink, num_comments, created_utc } = posts[0].data;
+    
+    const { title, author, permalink, num_comments, created_utc } = post;
     const createdDate = new Date(created_utc * 1000).toLocaleString();
-
-    header.innerHTML = `
-        <h3>Reddit Comments for: ${title}</h3>
-        <h3>Reddit Comments for: ${query}</h3>
-        <h4>Author: ${author}</h4>
-        <h4>Comments: ${num_comments}</h4>
-        <h4>Created on: ${createdDate}</h4>
-        <h4>Created on: ${posts.length}</h4>
-        <a href="${'https://reddit.com' + permalink}" target="_blank">Go to Reddit Post</a>
+    
+    commentBoxContainer.innerHTML = `
+    <h3>${title}</h3>
+    <p><strong>Author:</strong> ${author}</p>
+    <p><strong>Comments:</strong> ${num_comments}</p>
+    <p><strong>Posted on:</strong> ${createdDate}</p>
+    <p><a href="https://reddit.com${permalink}" target="_blank">View on Reddit</a></p>
     `;
-    commentBoxContainer.appendChild(header);
 }
 
-// Main function to extract anime title, episode number, search Reddit and display the comments
-async function displayRedditComments() {
-    // Extract the page title and URL
-    const pageTitle = document.title;
+function debugLog(){
+    const commentBoxContainer = document.createElement("div");
+    commentBoxContainer.id = "commentsBox";
+    document.body.appendChild(commentBoxContainer);
+    
     const url = window.location.href;
 
-    // Extract English title from page title and Japanese title + episode number from URL
-    const englishTitle = extractEnglishTitle(pageTitle);
-    const { japaneseTitle, episodeNumber } = extractJapaneseTitleAndEpisode(url);
+    const pageEnglish = extractEnglishTitle();
+    const pageJapanese = extractJapaneseTitle();
+    const episodeNumber = extractEpisode(url);
 
-    if (!englishTitle || !japaneseTitle || !episodeNumber) {
+    const query = `${pageEnglish} - Episode ${episodeNumber} discussion`;
+    
+    commentBoxContainer.innerHTML = `
+        <h3>${pageEnglish}</h3>
+        <p>${pageJapanese}</p>
+        <p>${episodeNumber}</p>
+        <p>${query}</p>
+    `;
+    
+}
+
+async function displayRedditComments() {
+    const url = window.location.href;
+
+    const pageEnglish = extractEnglishTitle();
+    const pageJapanese = extractJapaneseTitle();
+    const episodeNumber = extractEpisode(url);
+
+    if (!pageEnglish || !pageJapanese || !episodeNumber) {
         console.error('Failed to extract necessary data');
         return;
     }
 
-    // Create the search query
-    const query = `${japaneseTitle} • ${englishTitle} - Episode ${episodeNumber} discussion`;
+    const query = `${pageJapanese} - Episode ${episodeNumber} discussion`;
+    const post = await searchRedditPosts(query, pageJapanese, pageEnglish, episodeNumber);
 
-    // Search Reddit for the query
-    const posts = searchRedditPosts(query);
-
-    // Create the comment box and append Reddit comments
-    createCommentBox(posts);
+    createCommentBox(post);
 }
 
-// Run the function to display Reddit comments when the page loads
+// debugLog();
 displayRedditComments();
-*/
