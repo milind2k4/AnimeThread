@@ -16,6 +16,9 @@ def extract_japanese_title_and_episode(url):
     return None, None
 
 
+def normalize_title(title):
+    return re.sub(r'[^\w\s]', '', title.lower()).strip()
+
 def search_reddit_posts(query, page_japanese, page_english, url_episode_number):
     url = f'https://www.reddit.com/r/anime/search.json?q={requests.utils.quote(query)}&restrict_sr=1&sort=relevance'
     headers = {
@@ -58,8 +61,10 @@ def search_reddit_posts(query, page_japanese, page_english, url_episode_number):
 
             # Match either English or Japanese title
             title_matches = (
-                (post_english.lower() == page_english.lower()) or 
-                (post_japanese.lower() == page_japanese.lower())
+                normalize_title(post_english) in normalize_title(page_english) or 
+                normalize_title(post_english) in normalize_title(page_japanese) or
+                normalize_title(post_japanese) in normalize_title(page_english) or
+                normalize_title(post_japanese) in normalize_title(page_japanese)
             )
 
             if title_matches and episode_number == url_episode_number:
@@ -94,7 +99,7 @@ anime_url = "https://animekai.to/watch/shoshimin-how-to-become-ordinary-season-2
 
 page_english = "Shoshimin: How to Become Ordinary Season 2"
 page_japanese = "Shoushimin Series 2nd Season"
-x, episode_number = extract_japanese_title_and_episode(anime_url)
+episode_number = "4"
 
 query = f"{page_english} - Episode {episode_number} discussion"
 print(query)

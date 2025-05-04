@@ -17,6 +17,8 @@ const manifest = {
 
   permissions: [
     "activeTab",
+    "tabs",
+    "storage",
     "https://www.reddit.com/*"
   ],
 
@@ -29,7 +31,8 @@ const manifest = {
   ],
   browser_action: {
     default_icon: "icons/icon48.png",
-    default_title: "AniReddit"
+    default_title: "AniReddit",
+    default_popup: "popup/popup.html"
   }
 };
 

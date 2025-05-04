@@ -37,6 +37,14 @@ function extractEpisode(url) {
     return episodeNumber;    
 }
 
+function normalizeTitle(title) {
+    return title
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '')  // remove punctuation
+        .replace(/\s+/g, ' ')     // collapse whitespace
+        .trim();
+}
+
 async function searchRedditPosts(query, pageJapanese, pageEnglish, urlEpisodeNumber) {
     const url = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&sort=relevance`;
 
@@ -164,3 +172,22 @@ async function displayRedditComments() {
 
 // debugLog();
 displayRedditComments();
+
+// browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+//     if (message.action === "displayComments") {
+//         // Call displayRedditComments and send the result back
+//         displayRedditComments()
+//             .then(post => sendResponse({ success: true, post }))
+//             .catch(err => sendResponse({ success: false, error: err.message }));
+//         return true; // This keeps the message channel open for async response
+//     }
+
+//     if (message.action === "showDebug") {
+//         // Call debugLog and send the result back
+//         const debugInfo = debugLog();
+//         sendResponse({ success: true, debugInfo });
+//     }
+
+//     // Default response if action is unrecognized
+//     sendResponse({ success: false, error: "Unknown action" });
+// });
