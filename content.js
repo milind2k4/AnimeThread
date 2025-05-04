@@ -10,6 +10,8 @@ function extractEnglishTitle() {
 
     if (titles.length >= 2) {
         return titles[1].trim(); // The second title is the English title
+    } else if (titles.length === 1) {
+        return titles[0].trim(); // If there's only one title, return it as English title
     }
     return null; // Return null if we cannot extract the English title
 }
@@ -45,68 +47,121 @@ function normalizeTitle(title) {
         .trim();
 }
 
+function parsePostTitle(title) {
+    let postEnglish = "";
+    let postJapanese = "";
+    let episodeNumber = null;
+
+    // Try dual title format first (Japanese • English - Episode X)
+    const dualTitleMatch = title.match(/^(.*?)\s*•\s*(.*?)\s*-\s*Episode/i);
+    if (dualTitleMatch) {
+        postJapanese = dualTitleMatch[1].trim();
+        postEnglish = dualTitleMatch[2].trim();
+    } 
+    // Try single title format (Title - Episode X)
+    else {
+        const singleTitleMatch = title.match(/^(.*?)\s*-\s*Episode/i);
+        if (singleTitleMatch) {
+            postEnglish = postJapanese = singleTitleMatch[1].trim();
+        }
+    }
+
+    // Extract episode number using multiple patterns
+    const episodeMatch = title.match(/(?:Episode|Ep\.?|#)\s*(\d+)/i);
+    episodeNumber = episodeMatch ? episodeMatch[1] : null;
+
+    return { postEnglish, postJapanese, episodeNumber };
+}
+
+function findMatchingPost(posts, pageJapanese, pageEnglish, urlEpisodeNumber) {
+    if (!posts || posts.length === 0) {
+        console.log("No posts found.");
+        return null;
+    }
+
+    // Normalize titles for comparison
+    const normPageJapanese = normalizeTitle(pageJapanese);
+    const normPageEnglish = normalizeTitle(pageEnglish);
+
+    for (const post of posts) {
+        const postData = post.data;
+        
+        // Skip if not AutoLovepon's post
+        if (postData.author !== "AutoLovepon") continue;
+
+        const title = postData.title;
+        
+        // Extract titles and episode number
+        const { postEnglish, postJapanese, episodeNumber } = parsePostTitle(title);
+
+        // Normalize extracted titles
+        const normPostEnglish = normalizeTitle(postEnglish);
+        const normPostJapanese = normalizeTitle(postJapanese);
+
+        // Check for title match (either English or Japanese)
+        const titleMatches = (
+            normPostEnglish === normPageEnglish ||
+            normPostEnglish === normPageJapanese ||
+            normPostJapanese === normPageEnglish ||
+            normPostJapanese === normPageJapanese ||
+            normPageEnglish.includes(normPostEnglish) ||
+            normPostEnglish.includes(normPageEnglish)
+        );
+
+        // Check episode number match
+        const episodeMatches = (
+            episodeNumber === urlEpisodeNumber ||
+            String(episodeNumber) === String(urlEpisodeNumber)
+        );
+
+        if (titleMatches && episodeMatches) {
+            return postData;
+        }
+    }
+
+    return null;
+}
+
+
 async function searchRedditPosts(query, pageJapanese, pageEnglish, urlEpisodeNumber) {
     const url = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&sort=relevance`;
+    const fallbackUrl = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(pageEnglish + " Episode " + urlEpisodeNumber)}&restrict_sr=1&sort=relevance`;
 
     try {
-        const response = await fetch(url, {
+        // First try with the full query
+        let response = await fetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
             }
         });
 
-        if (!response.ok) {
-            console.error(`Failed to fetch data: ${response.status}`);
-            return null;
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        let data = await response.json();
+        let posts = data.data.children;
+        let result = findMatchingPost(posts, pageJapanese, pageEnglish, urlEpisodeNumber);
+        
+        // If no match found, try with fallback query
+        if (!result && query !== pageEnglish + " Episode " + urlEpisodeNumber + " discussion") {
+            response = await fetch(fallbackUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
+                }
+            });
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            data = await response.json();
+            posts = data.data.children;
+            result = findMatchingPost(posts, pageJapanese, pageEnglish, urlEpisodeNumber);
         }
 
-        const data = await response.json();
-        const posts = data.data.children;
-
-        if (!posts.length) {
-            console.log("No posts found.");
-            return null;
-        }
-
-        for (const post of posts) {
-            const postData = post.data;
-            if (postData.author !== "AutoLovepon") continue;
-
-            const title = postData.title;
-            let postEnglish = "";
-            let postJapanese = "";
-            let episodeNumber = null;
-
-            const dualTitleMatch = title.match(/^(.*?)\s*•\s*(.*?)\s*-\s*Episode/i);
-            const singleTitleMatch = title.match(/^(.*?)\s*-\s*Episode/i);
-
-            if (dualTitleMatch) {
-                postJapanese = dualTitleMatch[1].trim();
-                postEnglish = dualTitleMatch[2].trim();
-            } else if (singleTitleMatch) {
-                postEnglish = postJapanese = singleTitleMatch[1].trim();
-            }
-
-            const episodeMatch = title.match(/Episode\s+(\d+)\s+discussion/i);
-            episodeNumber = episodeMatch ? episodeMatch[1] : null;
-
-            const titleMatches = (
-                postEnglish.toLowerCase() === pageEnglish.toLowerCase() || 
-                postJapanese.toLowerCase() === pageJapanese.toLowerCase()
-            );
-
-            if (titleMatches && episodeNumber === urlEpisodeNumber) {
-                return postData;
-            }
-        }
-
-        return null;
+        return result || null;
     } catch (error) {
         console.error("Error fetching Reddit posts:", error);
         return null;
     }
 }
-
 
 function createCommentBox(post) {
     const commentBoxContainer = document.createElement("div");
@@ -130,7 +185,32 @@ function createCommentBox(post) {
     `;
 }
 
-function debugLog(){
+function queryGenerator() {
+    const pageJapanese = extractJapaneseTitle();
+    const pageEnglish = extractEnglishTitle();
+    const episodeNumber = extractEpisode(window.location.href);
+
+    if (!pageEnglish || !pageJapanese || !episodeNumber) {
+        console.error('Failed to extract necessary data');
+        return null;
+    }
+
+    return {
+        query: `${pageJapanese} - Episode ${episodeNumber} discussion`,
+        pageJapanese,
+        pageEnglish,
+        episodeNumber
+    }
+};
+
+async function displayRedditComments() {
+    const { query, pageJapanese, pageEnglish, episodeNumber } = queryGenerator();
+    const post = await searchRedditPosts(query, pageJapanese, pageEnglish, episodeNumber);
+
+    createCommentBox(post);
+}
+
+function debugPageInfo(){
     const commentBoxContainer = document.createElement("div");
     commentBoxContainer.id = "commentsBox";
     document.body.appendChild(commentBoxContainer);
@@ -152,42 +232,57 @@ function debugLog(){
     
 }
 
-async function displayRedditComments() {
-    const url = window.location.href;
+async function debugRedditPosts(query) {
+    const url = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&sort=relevance`;
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+    });
 
-    const pageEnglish = extractEnglishTitle();
-    const pageJapanese = extractJapaneseTitle();
-    const episodeNumber = extractEpisode(url);
+    if (!response.ok) {
+        console.error('Error fetching Reddit posts');
+        return [];
+    }
 
-    if (!pageEnglish || !pageJapanese || !episodeNumber) {
-        console.error('Failed to extract necessary data');
+    const data = await response.json();
+    return data.data.children;
+}
+
+function debugSearchResults(posts) {
+    const commentBoxContainer = document.createElement("div");
+    commentBoxContainer.id = "commentsBox";
+    document.body.appendChild(commentBoxContainer);
+
+    if (posts.length === 0) {
+        commentBoxContainer.innerHTML = '<p>No comments found.</p>';
         return;
     }
 
-    const query = `${pageJapanese} - Episode ${episodeNumber} discussion`;
-    const post = await searchRedditPosts(query, pageJapanese, pageEnglish, episodeNumber);
-
-    createCommentBox(post);
+    for (const post of posts) {
+        const header = document.createElement("div");
+        const { title, author, permalink, num_comments, created_utc } = post.data;
+    
+        header.innerHTML = `
+            <h3>Reddit Comments for: ${title}</h3>
+            <h4>Author: ${author}</h4>
+            <h4>Comments: ${num_comments}</h4>
+            <a href="${'https://reddit.com' + permalink}" target="_blank">Go to Reddit Post</a>
+        `;
+        commentBoxContainer.appendChild(header);
+    }
 }
 
-// debugLog();
-displayRedditComments();
 
-// browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-//     if (message.action === "displayComments") {
-//         // Call displayRedditComments and send the result back
-//         displayRedditComments()
-//             .then(post => sendResponse({ success: true, post }))
-//             .catch(err => sendResponse({ success: false, error: err.message }));
-//         return true; // This keeps the message channel open for async response
-//     }
-
-//     if (message.action === "showDebug") {
-//         // Call debugLog and send the result back
-//         const debugInfo = debugLog();
-//         sendResponse({ success: true, debugInfo });
-//     }
-
-//     // Default response if action is unrecognized
-//     sendResponse({ success: false, error: "Unknown action" });
+// debugRedditPosts(queryGenerator())
+//     .then(posts => {
+//         debugSearchResults(posts);
+//     })
+//     .catch(error => {
+//         console.error("Error:", error);
 // });
+
+// debugPageInfo();
+
+displayRedditComments();
