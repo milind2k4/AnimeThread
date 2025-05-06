@@ -1,21 +1,6 @@
 import requests
 import re
 
-def extract_japanese_title_and_episode(url):
-    # Extract the Japanese title and episode number from the URL
-    match = re.search(r"watch/([^/#]+)#ep=(\d+)", url)
-
-    parts = match.group(1).split("-")
-    if len(parts) > 1:
-        parts.pop() 
-
-    if match:
-        page_japanese = " ".join(parts).title()  # Format the Japanese title
-        episode_number = match.group(2)
-        return page_japanese, episode_number
-    return None, None
-
-
 def normalize_title(title):
     return re.sub(r'[^\w\s]', '', title.lower()).strip()
 
@@ -75,7 +60,7 @@ def search_reddit_posts(query, page_japanese, page_english, url_episode_number):
         return None
 
 
-def create_comment_box(post):
+def show_post(post):
     if post is None:
         print("No relevant Reddit posts found.")
         return
@@ -110,4 +95,4 @@ print()
 # print(query)
 
 post = search_reddit_posts(query, page_japanese, page_english, episode_number)
-create_comment_box(post)
+show_post(post)

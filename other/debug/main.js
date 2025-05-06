@@ -1,44 +1,3 @@
-function extractEnglishTitle() {
-    const titleElement = document.querySelector('.al-title.text-expand');
-    if (!titleElement) {
-        console.error("Title element not found.");
-        return null;
-    }
-
-    const titleText = titleElement.textContent.trim();
-    const titles = titleText.split(';');
-
-    if (titles.length >= 2) {
-        return titles[1].trim(); // The second title is the English title
-    } else if (titles.length === 1) {
-        return titles[0].trim(); // If there's only one title, return it as English title
-    }
-    return null; // Return null if we cannot extract the English title
-}
-
-function extractJapaneseTitle() {
-    const titleElement = document.querySelector('.al-title.text-expand');
-    if (!titleElement) {
-        console.error("Title element not found.");
-        return { japaneseTitle: null };
-    }
-
-    const titleText = titleElement.textContent.trim();
-    const titles = titleText.split(';');
-    
-    const japaneseTitle = titles.length >= 1 ? titles[0].trim() : null;
-    
-    return japaneseTitle;
-}
-
-function extractEpisode(url) {
-    const episodeRegex = /#ep=(\d+)/;
-    const episodeMatch = url.match(episodeRegex);
-    const episodeNumber = episodeMatch ? episodeMatch[1] : "Unknown";
-
-    return episodeNumber;    
-}
-
 function normalizeTitle(title) {
     return title
         .toLowerCase()
@@ -125,7 +84,7 @@ function findMatchingPost(posts, pageJapanese, pageEnglish, urlEpisodeNumber) {
 
 async function searchRedditPosts(query, pageJapanese, pageEnglish, urlEpisodeNumber) {
     const url = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&sort=relevance`;
-    const fallbackUrl = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(pageEnglish + " Episode " + urlEpisodeNumber)}&restrict_sr=1&sort=relevance`;
+    const fallbackUrl = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(`${pageJapanese} - Episode ${urlEpisodeNumber} discussion`)}&restrict_sr=1&sort=relevance`;
 
     try {
         // First try with the full query
@@ -164,39 +123,29 @@ async function searchRedditPosts(query, pageJapanese, pageEnglish, urlEpisodeNum
 }
 
 function createCommentBox(post) {
-    const commentBoxContainer = document.createElement("div");
-    commentBoxContainer.id = "commentsBox";
-    document.body.appendChild(commentBoxContainer);
-    
     if (!post) {
         commentBoxContainer.innerHTML = '<p>No comments found.</p>';
         return;
     }
     
-    const { title, author, permalink, num_comments, created_utc } = post;
-    const createdDate = new Date(created_utc * 1000).toLocaleString();
+    const { title, author, permalink, num_comments } = post;
     
-    commentBoxContainer.innerHTML = `
-    <h3>${title}</h3>
-    <p><strong>Author:</strong> ${author}</p>
-    <p><strong>Comments:</strong> ${num_comments}</p>
-    <p><strong>Posted on:</strong> ${createdDate}</p>
-    <p><a href="https://reddit.com${permalink}" target="_blank">View on Reddit</a></p>
-    `;
+    console.log(`
+        ${title}
+        Author: ${author}
+        Comments: ${num_comments}
+        https://reddit.com${permalink}
+        `
+    );
 }
 
 function queryGenerator() {
-    const pageJapanese = extractJapaneseTitle();
-    const pageEnglish = extractEnglishTitle();
-    const episodeNumber = extractEpisode(window.location.href);
-
-    if (!pageEnglish || !pageJapanese || !episodeNumber) {
-        console.error('Failed to extract necessary data');
-        return null;
-    }
+    const pageJapanese = "Shoushimin Series 2nd Season";
+    const pageEnglish = "Shoshimin: How to Become Ordinary Season 2";
+    const episodeNumber = "5";
 
     return {
-        query: `${pageJapanese} - Episode ${episodeNumber} discussion`,
+        query: `${pageEnglish} - Episode ${episodeNumber} discussion`,
         pageJapanese,
         pageEnglish,
         episodeNumber
@@ -206,78 +155,74 @@ function queryGenerator() {
 async function displayRedditComments() {
     const { query, pageJapanese, pageEnglish, episodeNumber } = queryGenerator();
     const post = await searchRedditPosts(query, pageJapanese, pageEnglish, episodeNumber);
-
+    
     createCommentBox(post);
 }
 
-function debugPageInfo(){
-    const commentBoxContainer = document.createElement("div");
-    commentBoxContainer.id = "commentsBox";
-    document.body.appendChild(commentBoxContainer);
-    
-    const url = window.location.href;
-
-    const pageEnglish = extractEnglishTitle();
-    const pageJapanese = extractJapaneseTitle();
-    const episodeNumber = extractEpisode(url);
-
-    const query = `${pageEnglish} - Episode ${episodeNumber} discussion`;
-    
-    commentBoxContainer.innerHTML = `
-        <h3>${pageEnglish}</h3>
-        <p>${pageJapanese}</p>
-        <p>${episodeNumber}</p>
-        <p>${query}</p>
-    `;
-    
-}
-
-async function debugRedditPosts(query) {
+async function allPosts(query, pageJapanese, pageEnglish, urlEpisodeNumber) {
     const url = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(query)}&restrict_sr=1&sort=relevance`;
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+    const fallbackUrl = `https://www.reddit.com/r/anime/search.json?q=${encodeURIComponent(`${pageJapanese} - Episode ${urlEpisodeNumber} discussion`)}&restrict_sr=1&sort=relevance`;
+
+    try {
+        // First try with the full query
+        let response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
+            }
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        let data = await response.json();
+        let posts = data.data.children;
+        let result = posts;
+        
+        // If no match found, try with fallback query
+        if (!result && query !== pageEnlgish + " Episode " + urlEpisodeNumber + " discussion") {
+            response = await fetch(fallbackUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
+                }
+            });
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            data = await response.json();
+            posts = data.data.children;
+            result = posts;
         }
-    });
 
-    if (!response.ok) {
-        console.error('Error fetching Reddit posts');
-        return [];
+        return result || null;
+    } catch (error) {
+        console.error("Error fetching Reddit posts:", error);
+        return null;
     }
-
-    const data = await response.json();
-    return data.data.children;
 }
 
-function debugSearchResults(posts) {
-    const commentBoxContainer = document.createElement("div");
-    commentBoxContainer.id = "commentsBox";
-    document.body.appendChild(commentBoxContainer);
-
+function searchResults(posts) {
     if (posts.length === 0) {
-        commentBoxContainer.innerHTML = '<p>No comments found.</p>';
+        console.log("No posts found.");
         return;
     }
 
     for (const post of posts) {
-        const header = document.createElement("div");
-        const { title, author, permalink, num_comments, created_utc } = post.data;
+        const { title, author, permalink, num_comments } = post.data;
     
-        header.innerHTML = `
-            <h3>Reddit Comments for: ${title}</h3>
-            <h4>Author: ${author}</h4>
-            <h4>Comments: ${num_comments}</h4>
-            <a href="${'https://reddit.com' + permalink}" target="_blank">Go to Reddit Post</a>
-        `;
-        commentBoxContainer.appendChild(header);
+        console.log(`
+            Title: ${title}
+            Aurthor: ${author}
+            Comments: ${num_comments}
+            Link: https://reddit.com${permalink}
+            ------------------------------------------------
+            `
+        );
     }
 }
 
 
-// debugRedditPosts(queryGenerator())
+// allPosts(queryGenerator())
 //     .then(posts => {
-//         debugSearchResults(posts);
+//         searchResults(posts);
 //     })
 //     .catch(error => {
 //         console.error("Error:", error);
