@@ -1,0 +1,58 @@
+"Continue previous Firefox anime comments extension work:  
+- Structure: [paste tree if needed]  
+- Last goal: Fixing Reddit search for season-based titles  
+- Current issue: [describe if any]  
+- Code link: [paste critical snippets]"  
+
+
+Extension Architecture:
+
+src/
+├── adapters/
+│   ├── animekai/
+│   │   ├── comment-ui.js
+│   │   ├── index.js
+│   │   └── styles.css
+│   ├── hianime/
+│   │   ├── comment-ui.js
+│   │   ├── index.js
+│   │   └── styles.css
+│   ├── base.js
+│   ├── index.js
+│   └── init.js
+├── core/
+│   ├── comment-manager.js
+│   └── event-bus.js
+├── services/
+│   └── reddit/
+│       ├── api.js
+│       ├── parser.js
+│       ├── RedditService.js
+│       └── search.js
+├── shared
+└── utils/
+    ├── tests/
+    │   ├── api.test.js
+    │   ├── commentParser.test.js
+    │   ├── parser.test.js
+    │   ├── rateLimiter.test.js
+    │   └── RedditService.test.js
+    ├── commentsRenderer.js
+    └── rateLimiter.js
+
+
+Current Focus:
+
+    Reddit integration (fetching/parsing discussions)
+
+    AutoModerator comment filtering
+
+    Fuzzy title matching improvements
+
+Recent Changes:
+
+    Skipped first comment via comments.slice(1)
+
+    Enhanced season formatting in search
+
+    Added tiered search fallbacks

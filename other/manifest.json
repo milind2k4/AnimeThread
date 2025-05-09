@@ -8,6 +8,8 @@
   },
   "permissions": [
     "activeTab",
+    "tabs",
+    "storage",
     "https://www.reddit.com/*"
   ],
   "content_scripts": [
@@ -27,6 +29,7 @@
   ],
   "browser_action": {
     "default_icon": "icons/icon48.png",
-    "default_title": "AniReddit"
+    "default_title": "AniReddit",
+    "default_popup": "popup/popup.html"
   }
 }
